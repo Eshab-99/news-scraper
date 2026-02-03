@@ -1,5 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
+import json
 from datetime import datetime
 
 # Target URL
@@ -50,3 +51,10 @@ for article_url in article_paths:
     })
 
 print(articles_data)
+# File name
+file_name = 'Sky_sports.json'
+# Write to JSON file
+with open(file_name, 'w', encoding='utf-8') as f:
+    json.dump(articles_data, f, ensure_ascii=False, indent=4)
+print(f"Data saved to {file_name}")
+
