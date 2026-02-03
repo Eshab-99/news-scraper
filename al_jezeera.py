@@ -1,58 +1,61 @@
 import requests
 from bs4 import BeautifulSoup
+import json
 from datetime import datetime
+import xml.etree.ElementTree as ET
 
-# Target URL – Al Jazeera World News
-url = "https://www.aljazeera.com/news/"
+# RSS feed (official)
+rss_url = "https://www.aljazeera.com/xml/rss/all.xml"
 
-headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-}
+headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-# 1️ Fetch homepage
-response = requests.get(url, headers=headers)
-soup = BeautifulSoup(response.text, "html.parser")
+# 1️ Fetch RSS
+rss_response = requests.get(rss_url, headers=headers)
+root = ET.fromstring(rss_response.content)
 
-# 2️ Find article links
-# Articles are in <a> tags with class "fte-featured__link" or "gc__title__link"
-article_tags = soup.find_all("a", class_="fte-featured__link") + \
-               soup.find_all("a", class_="gc__title__link")
+# 2️ Get article URLs
+article_links = []
+for item in root.findall(".//item"):
+    link_tag = item.find("link")
+    if link_tag is not None:
+        article_links.append(link_tag.text)
 
-article_urls = []
-for tag in article_tags:
-    href = tag.get("href")
-    if href and href not in article_urls:
-        if href.startswith("/"):
-            href = "https://www.aljazeera.com" + href
-        article_urls.append(href)
+print(f"Found {len(article_links)} articles in RSS feed.")
 
-# 3️ Visit each article and extract data
+# 3️ Visit each article
 articles_data = []
 
-for article_url in article_urls:
-    article_response = requests.get(article_url, headers=headers)
-    article_soup = BeautifulSoup(article_response.text, "html.parser")
+for url in article_links:
+    resp = requests.get(url, headers=headers)
+    soup = BeautifulSoup(resp.text, "html.parser")
 
     # Title
-    title_tag = article_soup.find("h1")
-    title = title_tag.get_text(strip=True) if title_tag else None
+    title_tag = soup.find("h1")
+    if not title_tag:
+        continue
+    title = title_tag.get_text(strip=True)
 
     # Content
-    content_section = article_soup.find("div", class_="wysiwyg wysiwyg--all-content")
-    paragraphs = content_section.find_all("p") if content_section else []
+    content_div = soup.find("div", class_="wysiwyg wysiwyg--all-content")
+    paragraphs = content_div.find_all("p") if content_div else []
     content = "\n".join(p.get_text(strip=True) for p in paragraphs)
 
-    # Optional: category/tag
-    tag_el = article_soup.find("a", {"data-element": "article-section"})
+    # Optional tag/category
+    tag_el = soup.find("a", {"data-element": "article-section"})
     tag = tag_el.get_text(strip=True) if tag_el else None
 
     articles_data.append({
         "title": title,
         "tag": tag,
         "content": content,
-        "url": article_url,
+        "url": url,
         "scraped_at": datetime.now().isoformat()
     })
 
-# 4️ Print results
-print(articles_data)
+# 4️ Save JSON
+file_name = "al_jezeera.json"
+with open(file_name, "w", encoding="utf-8") as f:
+    json.dump(articles_data, f, ensure_ascii=False, indent=4)
+
+print(f"Scraped {len(articles_data)} articles. Data saved to {file_name}")
+
