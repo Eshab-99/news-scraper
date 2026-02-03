@@ -1,4 +1,5 @@
 import requests
+import json
 from bs4 import BeautifulSoup
 from datetime import datetime
 
@@ -36,3 +37,9 @@ for each_article_url in articles_url:
     })
 
 print(articles_data)
+# File name
+file_name = 'Onilne_khabar.json'
+# Write to JSON file
+with open(file_name, 'w', encoding='utf-8') as f:
+    json.dump(articles_data, f, ensure_ascii=False, indent=4)
+print(f"Data saved to {file_name}")
