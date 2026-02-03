@@ -1,57 +1,65 @@
 import requests
 from bs4 import BeautifulSoup
+import json
 from datetime import datetime
+import xml.etree.ElementTree as ET
 
-# Target URL
-url = "https://www.setopati.com/"
+# RSS feed URL
+rss_url = "https://www.setopati.com/rss"
 
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 }
 
-# 1️ Fetch homepage
-response = requests.get(url, headers=headers)
-soup = BeautifulSoup(response.text, "html.parser")
+# 1️ Fetch RSS feed
+rss_response = requests.get(rss_url, headers=headers)
+rss_content = rss_response.content
 
-# 2️ Find article links
-article_urls = []
-for a in soup.find_all("a", href=True):
-    href = a["href"]
+# 2️ Parse XML and extract article links
+root = ET.fromstring(rss_content)
+article_links = []
 
-    # Only keep Setopati article URLs (pattern: /section/... or /category/...)
-    if href.startswith("/"):
-        full_url = "https://www.setopati.com" + href
-        # Avoid adding non-news pages
-        if "/pages/" in full_url or "/privacy-policy" in full_url:
-            continue
-        if full_url not in article_urls:
-            article_urls.append(full_url)
+for item in root.findall(".//item"):
+    link_tag = item.find("link")
+    if link_tag is not None:
+        article_links.append(link_tag.text)
 
-# 3️ Visit each article and extract data
+print(f"Found {len(article_links)} articles in RSS feed.")
+
+# 3️ Visit each article and extract full content
 articles_data = []
 
-for article_url in article_urls:
-    art_resp = requests.get(article_url, headers=headers)
-    art_soup = BeautifulSoup(art_resp.text, "html.parser")
+for article_url in article_links:
+    article_response = requests.get(article_url, headers=headers)
+    article_soup = BeautifulSoup(article_response.text, "html.parser")
 
     # Title
-    title_tag = art_soup.find("h1")
+    title_tag = article_soup.find("h1")
     if not title_tag:
         continue
     title = title_tag.get_text(strip=True)
 
-    # Content paragraphs
-    # Setopati article content is often inside div elements
-    content_div = art_soup.find("div")
+    # Content
+    content_div = article_soup.find("div", class_="news-content")
     paragraphs = content_div.find_all("p") if content_div else []
     content = "\n".join(p.get_text(strip=True) for p in paragraphs)
+
+    # Optional: Published date
+    date_tag = article_soup.find("span", class_="news-date")
+    published_date = date_tag.get_text(strip=True) if date_tag else None
 
     articles_data.append({
         "title": title,
         "content": content,
         "url": article_url,
+        "published_date": published_date,
         "scraped_at": datetime.now().isoformat()
     })
 
-# 4️ Print results
-print(articles_data)
+# 4️ Save to JSON
+file_name = "setopati_full.json"
+with open(file_name, "w", encoding="utf-8") as f:
+    json.dump(articles_data, f, ensure_ascii=False, indent=4)
+
+print(f"Scraped {len(articles_data)} articles. Data saved to {file_name}")
+
